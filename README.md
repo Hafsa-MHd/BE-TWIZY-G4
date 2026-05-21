@@ -292,11 +292,11 @@ Adapter le chemin du jar selon votre machine (voir `.classpath` Eclipse).
 
 | | |
 |---|---|
-| **Groupe** | _[Nom du groupe]_ |
+| **Groupe** | Groupe_4|
 | **Dépôt Git** | https://github.com/Hafsa-MHd/BE-TWIZY-G4 |
 | **Année** | 2026 — BE Twizy |
 | **Rapport** | Déposé sur ARCHE (*Rapport Final 2026*) — inclure le lien Git ci-dessus |
-| **Contact** | _[email]_ |
+
 
 **Données non versionnées :** voir [DATASET.md](DATASET.md) (`dataset/`, `dataset_filtered/`, `external_images/`).
 
