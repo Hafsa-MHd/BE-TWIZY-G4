@@ -6,7 +6,7 @@ import java.io.File;
 import java.util.List;
 
 /**
- * Photo externe avec CNN (ex. p5.jpg pour 110).
+ * Photo externe avec CNN (ronds + triangles).
  */
 public class SceneRecognitionCnn {
 
@@ -29,26 +29,31 @@ public class SceneRecognitionCnn {
             return;
         }
 
-        List<Mat> signs = SignDetector.detectCircularRedSigns(scene);
+        List<SignDetector.Detection> detections = SignDetector.detectDetailed(scene);
         System.out.println("=== SceneRecognitionCnn ===");
         System.out.println("Image : " + imagePath);
-        System.out.println("Panneaux : " + signs.size());
+        System.out.println("Panneaux : " + detections.size());
 
         File detectedDir = new File("detected_signs");
         detectedDir.mkdirs();
 
-        for (int i = 0; i < signs.size(); i++) {
-            File cropFile = new File(detectedDir, "sign_cnn_" + (i + 1) + ".jpg");
-            Imgcodecs.imwrite(cropFile.getAbsolutePath(), signs.get(i));
+        int index = 0;
+        for (SignDetector.Detection detection : detections) {
+            index++;
+            Mat sign = detection.getCrop();
+            File cropFile = new File(detectedDir, "sign_cnn_" + index + ".jpg");
+            Imgcodecs.imwrite(cropFile.getAbsolutePath(), sign);
 
-            String type = SignTypeHeuristic.detectType(signs.get(i));
-            if (!"SPEED".equals(type)) {
+            String type = detection.isTriangular() ? "NON_SPEED" : SignTypeHeuristic.detectType(sign);
+            if (!detection.isTriangular() && !"SPEED".equals(type)) {
                 type = "NON_SPEED";
             }
 
-            String label = classifier.predict(cropFile, signs.get(i), type);
-            System.out.println("Panneau " + (i + 1) + " : " + SignRecognitionPipeline.formatLabel(label));
-            ImageUtils.show("CNN — " + label, signs.get(i));
+            String label = classifier.predict(cropFile, sign, type);
+            System.out.println("Panneau " + index + " ("
+                    + (detection.isTriangular() ? "triangle" : "rond") + ") : "
+                    + SignRecognitionPipeline.formatLabel(label));
+            ImageUtils.show("CNN — " + label, sign);
         }
     }
 }

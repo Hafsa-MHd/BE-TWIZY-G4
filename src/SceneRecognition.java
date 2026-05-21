@@ -6,10 +6,7 @@ import java.io.File;
 import java.util.List;
 
 /**
- * Pipeline complet : détecter les panneaux rouges circulaires dans une photo,
- * puis classer chaque panneau (vitesse vs autres).
- *
- * Modifier imagePath ci-dessous, puis lancer ce programme.
+ * Photo : panneaux ronds rouges + panneaux triangulaires jaunes, puis classification KNN.
  */
 public class SceneRecognition {
 
@@ -17,7 +14,7 @@ public class SceneRecognition {
         System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
 
         String trainPath = "dataset_filtered/train";
-        String imagePath = "external_images/p7.JPG";
+        String imagePath = args.length > 0 ? args[0] : "external_images/tr1.jpg";
 
         SignClassifier classifier = new SignClassifier();
         classifier.prepare(trainPath);
@@ -29,30 +26,37 @@ public class SceneRecognition {
             return;
         }
 
-        List<Mat> signs = SignDetector.detectCircularRedSigns(scene);
+        List<SignDetector.Detection> detections = SignDetector.detectDetailed(scene);
         System.out.println("Image : " + imagePath);
-        System.out.println("Panneaux détectés : " + signs.size());
+        System.out.println("Panneaux détectés : " + detections.size());
 
         File detectedDir = new File("detected_signs");
         detectedDir.mkdirs();
 
-        for (int i = 0; i < signs.size(); i++) {
-            File cropFile = new File(detectedDir, "sign_" + (i + 1) + ".jpg");
-            Imgcodecs.imwrite(cropFile.getAbsolutePath(), signs.get(i));
+        int index = 0;
+        for (SignDetector.Detection detection : detections) {
+            index++;
+            Mat sign = detection.getCrop();
+            File cropFile = new File(detectedDir, "sign_" + index + ".jpg");
+            Imgcodecs.imwrite(cropFile.getAbsolutePath(), sign);
 
-            String type = SignTypeHeuristic.detectType(signs.get(i));
-            if (!"SPEED".equals(type)) {
+            String type = detection.isTriangular() ? "NON_SPEED" : SignTypeHeuristic.detectType(sign);
+            if (!detection.isTriangular() && !"SPEED".equals(type)) {
                 type = "NON_SPEED";
             }
+            if (!detection.isTriangular() && SignTypeHeuristic.looksLikeSpeedLimitSign(sign)) {
+                type = "SPEED";
+            }
 
-            String label = classifier.predict(cropFile, signs.get(i), type);
+            String label = classifier.predict(cropFile, sign, type);
 
             System.out.println("--------------------------------");
-            System.out.println("Panneau " + (i + 1) + " : " + cropFile.getName());
+            System.out.println("Panneau " + index + " : " + cropFile.getName());
+            System.out.println("Forme     : " + (detection.isTriangular() ? "triangle" : "rond"));
             System.out.println("Type      : " + type);
             System.out.println("Classe    : " + label);
 
-            ImageUtils.show("Panneau " + (i + 1) + " : " + label, signs.get(i));
+            ImageUtils.show("Panneau " + index + " : " + label, sign);
         }
 
         File resultsDir = new File("results");

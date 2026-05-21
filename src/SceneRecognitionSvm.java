@@ -7,7 +7,6 @@ import java.util.List;
 
 /**
  * Même scène que {@link SceneRecognition}, mais classificateur SVM.
- * Modifiez imagePath pour tester p5, p9, p10, etc.
  */
 public class SceneRecognitionSvm {
 
@@ -15,7 +14,7 @@ public class SceneRecognitionSvm {
         System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
 
         String trainPath = "dataset_filtered/train";
-        String imagePath = args.length > 0 ? args[0] : "external_images/p9.jpg";
+        String imagePath = args.length > 0 ? args[0] : "external_images/tr2.jpg";
 
         SignClassifierSvm classifier = new SignClassifierSvm();
         classifier.prepare(trainPath);
@@ -27,32 +26,38 @@ public class SceneRecognitionSvm {
             return;
         }
 
-        List<Mat> signs = SignDetector.detectCircularRedSigns(scene);
+        List<SignDetector.Detection> detections = SignDetector.detectDetailed(scene);
         System.out.println("=== SceneRecognitionSvm ===");
         System.out.println("Image : " + imagePath);
-        System.out.println("Panneaux détectés : " + signs.size());
+        System.out.println("Panneaux détectés : " + detections.size());
 
         File detectedDir = new File("detected_signs");
         detectedDir.mkdirs();
 
-        for (int i = 0; i < signs.size(); i++) {
-            File cropFile = new File(detectedDir, "sign_svm_" + (i + 1) + ".jpg");
-            Imgcodecs.imwrite(cropFile.getAbsolutePath(), signs.get(i));
+        int index = 0;
+        for (SignDetector.Detection detection : detections) {
+            index++;
+            Mat sign = detection.getCrop();
+            File cropFile = new File(detectedDir, "sign_svm_" + index + ".jpg");
+            Imgcodecs.imwrite(cropFile.getAbsolutePath(), sign);
 
-            String type = SignTypeHeuristic.detectType(signs.get(i));
-            if (!"SPEED".equals(type)) {
+            String type = detection.isTriangular() ? "NON_SPEED" : SignTypeHeuristic.detectType(sign);
+            if (!detection.isTriangular() && !"SPEED".equals(type)) {
                 type = "NON_SPEED";
             }
+            if (!detection.isTriangular() && SignTypeHeuristic.looksLikeSpeedLimitSign(sign)) {
+                type = "SPEED";
+            }
 
-            String label = classifier.predict(cropFile, signs.get(i), type);
+            String label = classifier.predict(cropFile, sign, type);
 
             System.out.println("--------------------------------");
-            System.out.println("Panneau " + (i + 1) + " : " + cropFile.getName());
-            System.out.println("Type      : " + type);
+            System.out.println("Panneau " + index + " : " + cropFile.getName());
+            System.out.println("Forme     : " + (detection.isTriangular() ? "triangle" : "rond"));
             System.out.println("Classe SVM: " + label);
             System.out.println("Affichage : " + SignRecognitionPipeline.formatLabel(label));
 
-            ImageUtils.show("SVM — Panneau " + (i + 1) + " : " + label, signs.get(i));
+            ImageUtils.show("SVM — Panneau " + index + " : " + label, sign);
         }
 
         File resultsDir = new File("results");

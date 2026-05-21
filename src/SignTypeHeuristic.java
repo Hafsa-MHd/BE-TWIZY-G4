@@ -85,6 +85,94 @@ public class SignTypeHeuristic {
         return true;
     }
 
+    /** Panneau triangulaire de danger : jaune, blanc, ou bordure rouge (photos réelles type p7). */
+    public static boolean looksLikeWarningTriangle(Mat signImage) {
+        if (signImage == null || signImage.empty()) {
+            return false;
+        }
+        Mat hsv = ImageUtils.bgrToHsv(signImage);
+        int w = signImage.cols();
+        int h = signImage.rows();
+        int x0 = (int) (w * 0.08);
+        int y0 = (int) (h * 0.08);
+        int rw = (int) (w * 0.84);
+        int rh = (int) (h * 0.84);
+        if (rw < 4 || rh < 4) {
+            return false;
+        }
+        Mat roi = new Mat(hsv, new Rect(x0, y0, rw, rh));
+        double area = rw * (double) rh;
+
+        Mat yellowMask = new Mat();
+        Core.inRange(roi, new Scalar(12, 45, 50), new Scalar(45, 255, 255), yellowMask);
+        double yellowRatio = Core.countNonZero(yellowMask) / area;
+
+        Mat whiteMask = new Mat();
+        Core.inRange(roi, new Scalar(0, 0, 150), new Scalar(180, 80, 255), whiteMask);
+        double whiteRatio = Core.countNonZero(whiteMask) / area;
+
+        Mat redMask1 = new Mat();
+        Mat redMask2 = new Mat();
+        Mat redMask = new Mat();
+        Core.inRange(roi, new Scalar(0, 50, 50), new Scalar(15, 255, 255), redMask1);
+        Core.inRange(roi, new Scalar(160, 50, 50), new Scalar(180, 255, 255), redMask2);
+        Core.bitwise_or(redMask1, redMask2, redMask);
+        double redRatio = Core.countNonZero(redMask) / area;
+
+        if (yellowRatio > 0.06) {
+            return true;
+        }
+        if (whiteRatio > 0.22 && redRatio > 0.03) {
+            return true;
+        }
+        return redRatio > 0.05 && (yellowRatio > 0.02 || whiteRatio > 0.12);
+    }
+
+    /** Score 0–1 pour classer les candidats triangles (meilleur = vrai panneau). */
+    public static double warningTriangleColorScore(Mat signImage) {
+        if (signImage == null || signImage.empty()) {
+            return 0;
+        }
+        Mat hsv = ImageUtils.bgrToHsv(signImage);
+        int w = signImage.cols();
+        int h = signImage.rows();
+        int rw = (int) (w * 0.84);
+        int rh = (int) (h * 0.84);
+        int x0 = (int) (w * 0.08);
+        int y0 = (int) (h * 0.08);
+        if (rw < 4 || rh < 4) {
+            return 0;
+        }
+        Mat roi = new Mat(hsv, new Rect(x0, y0, rw, rh));
+        double area = rw * (double) rh;
+
+        Mat yellowMask = new Mat();
+        Core.inRange(roi, new Scalar(12, 45, 50), new Scalar(45, 255, 255), yellowMask);
+        double yellow = Core.countNonZero(yellowMask) / area;
+
+        Mat whiteMask = new Mat();
+        Core.inRange(roi, new Scalar(0, 0, 150), new Scalar(180, 80, 255), whiteMask);
+        double white = Core.countNonZero(whiteMask) / area;
+
+        Mat redMask1 = new Mat();
+        Mat redMask2 = new Mat();
+        Mat redMask = new Mat();
+        Core.inRange(roi, new Scalar(0, 50, 50), new Scalar(15, 255, 255), redMask1);
+        Core.inRange(roi, new Scalar(160, 50, 50), new Scalar(180, 255, 255), redMask2);
+        Core.bitwise_or(redMask1, redMask2, redMask);
+        double red = Core.countNonZero(redMask) / area;
+
+        double score = 0;
+        score += Math.min(1.0, yellow / 0.15) * 0.45;
+        if (red > 0.04 && white > 0.15) {
+            score += 0.35;
+        }
+        if (red > 0.06 && yellow > 0.03) {
+            score += 0.20;
+        }
+        return Math.min(1.0, score);
+    }
+
     /**
      * Corrige le label KNN pour les panneaux « autres » sur scène réelle.
      * No_passing : cercle rouge, symboles rouges au centre, peu de texte noir.

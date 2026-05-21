@@ -23,10 +23,16 @@ public class SignDetector {
     public static class Detection {
         private final Mat crop;
         private final Rect bounds;
+        private final boolean triangular;
 
         public Detection(Mat crop, Rect bounds) {
+            this(crop, bounds, false);
+        }
+
+        public Detection(Mat crop, Rect bounds, boolean triangular) {
             this.crop = crop;
             this.bounds = bounds;
+            this.triangular = triangular;
         }
 
         public Mat getCrop() {
@@ -35,6 +41,10 @@ public class SignDetector {
 
         public Rect getBounds() {
             return bounds;
+        }
+
+        public boolean isTriangular() {
+            return triangular;
         }
     }
 
@@ -78,14 +88,236 @@ public class SignDetector {
         for (int[] preset : redPresets) {
             Mat redMask = redThreshold(hsv, preset[0], preset[1], preset[2]);
             tryContours(image, redMask, minContourArea, detected, usedRects, minSignPx);
-            if (!forVideo && !detected.isEmpty()) {
-                return detected;
-            }
         }
 
         tryHoughCircles(image, hsv, detected, usedRects, minSignPx);
 
+        detectTriangularWarningSigns(image, hsv, forVideo, detected, usedRects);
+
         return detected;
+    }
+
+    private static class TriangleCandidate {
+        final Detection detection;
+        final Rect bounds;
+        final double score;
+
+        TriangleCandidate(Detection detection, Rect bounds, double score) {
+            this.detection = detection;
+            this.bounds = bounds;
+            this.score = score;
+        }
+    }
+
+    /**
+     * Panneaux triangulaires : collecte, score, puis au plus 1 triangle sur photo (évite faux positifs).
+     */
+    private static void detectTriangularWarningSigns(Mat image, Mat hsv, boolean forVideo,
+                                                     List<Detection> out, List<Rect> usedRects) {
+        if (image == null || image.empty()) {
+            return;
+        }
+
+        double imageArea = image.rows() * image.cols();
+        double minContourArea = forVideo
+                ? Math.max(80, imageArea * 0.00010)
+                : Math.max(200, imageArea * 0.0012);
+        int minSide = forVideo ? 22 : 28;
+
+        ArrayList<TriangleCandidate> candidates = new ArrayList<TriangleCandidate>();
+
+        Mat yellowMask = yellowThreshold(hsv);
+        Mat warningMask = warningTriangleThreshold(hsv);
+        Mat redMask = redThreshold(hsv, 10, 165, 55);
+
+        collectTrianglesFromMask(image, yellowMask, minContourArea, minSide, imageArea, candidates);
+        collectTrianglesFromMask(image, warningMask, minContourArea, minSide, imageArea, candidates);
+        collectTrianglesFromRedMask(image, redMask, minContourArea, minSide, imageArea, candidates);
+
+        int maxTriangles = forVideo ? 2 : 1;
+        double minScore = forVideo ? 0.48 : 0.52;
+
+        for (TriangleCandidate picked : pickBestTriangles(candidates, maxTriangles, minScore)) {
+            if (isDuplicate(usedRects, picked.bounds)) {
+                continue;
+            }
+            out.add(picked.detection);
+            usedRects.add(picked.bounds);
+            Rect b = picked.bounds;
+            Imgproc.rectangle(image, new Point(b.x, b.y),
+                    new Point(b.x + b.width, b.y + b.height), new Scalar(255, 200, 0), 2);
+        }
+    }
+
+    private static void collectTrianglesFromMask(Mat image, Mat mask, double minContourArea, int minSide,
+                                                 double imageArea, ArrayList<TriangleCandidate> candidates) {
+        for (MatOfPoint contour : findContoursOnMask(mask)) {
+            collectTriangleContour(image, contour, minContourArea, minSide, imageArea, candidates);
+        }
+    }
+
+    private static void collectTrianglesFromRedMask(Mat image, Mat redMask, double minContourArea,
+                                                    int minSide, double imageArea,
+                                                    ArrayList<TriangleCandidate> candidates) {
+        for (MatOfPoint contour : findContoursOnMask(redMask)) {
+            double area = Imgproc.contourArea(contour);
+            if (area < minContourArea) {
+                continue;
+            }
+            MatOfPoint2f curve = new MatOfPoint2f();
+            curve.fromList(contour.toList());
+            Point center = new Point();
+            float[] radius = new float[1];
+            Imgproc.minEnclosingCircle(curve, center, radius);
+            if (radius[0] <= 0) {
+                continue;
+            }
+            double circleArea = Math.PI * radius[0] * radius[0];
+            if (area / circleArea > 0.58) {
+                continue;
+            }
+            collectTriangleContour(image, contour, minContourArea, minSide, imageArea, candidates);
+        }
+    }
+
+    private static void collectTriangleContour(Mat image, MatOfPoint contour, double minContourArea,
+                                               int minSide, double imageArea,
+                                               ArrayList<TriangleCandidate> candidates) {
+        int vertices = triangleVertexCount(contour);
+        if (!isTriangleContour(contour, minContourArea, vertices)) {
+            return;
+        }
+
+        Rect rect = Imgproc.boundingRect(contour);
+        int pad = Math.max(4, Math.min(rect.width, rect.height) / 8);
+        int x = Math.max(rect.x - pad, 0);
+        int y = Math.max(rect.y - pad, 0);
+        int right = Math.min(x + rect.width + 2 * pad, image.cols());
+        int bottom = Math.min(y + rect.height + 2 * pad, image.rows());
+        int w = right - x;
+        int h = bottom - y;
+
+        if (w < minSide || h < minSide) {
+            return;
+        }
+
+        double bboxArea = w * (double) h;
+        if (bboxArea < imageArea * 0.001 || bboxArea > imageArea * 0.12) {
+            return;
+        }
+
+        Rect safe = new Rect(x, y, w, h);
+        Mat sign = new Mat(image, safe);
+        Mat copy = new Mat();
+        sign.copyTo(copy);
+
+        if (SignTypeHeuristic.looksLikeSpeedLimitSign(copy)) {
+            return;
+        }
+        if (!SignTypeHeuristic.looksLikeWarningTriangle(copy)) {
+            return;
+        }
+
+        double score = scoreTriangleCandidate(copy, vertices, bboxArea / imageArea);
+        if (score < 0.35) {
+            return;
+        }
+
+        candidates.add(new TriangleCandidate(new Detection(copy, safe, true), safe, score));
+    }
+
+    private static ArrayList<TriangleCandidate> pickBestTriangles(ArrayList<TriangleCandidate> candidates,
+                                                                int maxCount, double minScore) {
+        ArrayList<TriangleCandidate> sorted = new ArrayList<TriangleCandidate>(candidates);
+        sorted.sort((a, b) -> Double.compare(b.score, a.score));
+
+        ArrayList<TriangleCandidate> picked = new ArrayList<TriangleCandidate>();
+        for (TriangleCandidate c : sorted) {
+            if (c.score < minScore) {
+                break;
+            }
+            boolean overlaps = false;
+            for (TriangleCandidate p : picked) {
+                if (overlapRatio(p.bounds, c.bounds) > 0.30) {
+                    overlaps = true;
+                    break;
+                }
+            }
+            if (!overlaps) {
+                picked.add(c);
+            }
+            if (picked.size() >= maxCount) {
+                break;
+            }
+        }
+        return picked;
+    }
+
+    private static double scoreTriangleCandidate(Mat crop, int vertices, double areaRatio) {
+        double score = 0.0;
+        if (vertices == 3) {
+            score += 0.35;
+        } else if (vertices == 4) {
+            score += 0.15;
+        }
+        if (areaRatio >= 0.002 && areaRatio <= 0.06) {
+            score += 0.25;
+        }
+        score += SignTypeHeuristic.warningTriangleColorScore(crop) * 0.40;
+        return score;
+    }
+
+    private static int triangleVertexCount(MatOfPoint contour) {
+        MatOfPoint2f curve = new MatOfPoint2f();
+        curve.fromList(contour.toList());
+        double peri = Imgproc.arcLength(curve, true);
+        if (peri < 1) {
+            return 0;
+        }
+        MatOfPoint2f approx = new MatOfPoint2f();
+        Imgproc.approxPolyDP(curve, approx, 0.07 * peri, true);
+        return (int) approx.total();
+    }
+
+    /** Jaune + blanc brillant (panneaux danger souvent peu saturés sur photo réelle). */
+    private static Mat warningTriangleThreshold(Mat hsv) {
+        Mat yellow = yellowThreshold(hsv);
+        Mat white = new Mat();
+        Core.inRange(hsv, new Scalar(0, 0, 160), new Scalar(180, 70, 255), white);
+        Mat combined = new Mat();
+        Core.bitwise_or(yellow, white, combined);
+        Mat kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5, 5));
+        Imgproc.morphologyEx(combined, combined, Imgproc.MORPH_CLOSE, kernel);
+        return combined;
+    }
+
+    private static Mat yellowThreshold(Mat hsv) {
+        Mat mask = new Mat();
+        Core.inRange(hsv, new Scalar(15, 60, 60), new Scalar(40, 255, 255), mask);
+        Mat kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5, 5));
+        Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE, kernel);
+        Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_OPEN, kernel);
+        return mask;
+    }
+
+    private static boolean isTriangleContour(MatOfPoint contour, double minArea, int vertices) {
+        double area = Imgproc.contourArea(contour);
+        if (area < minArea || vertices < 3 || vertices > 4) {
+            return false;
+        }
+
+        Rect rect = Imgproc.boundingRect(contour);
+        if (rect.width < 1 || rect.height < 1) {
+            return false;
+        }
+
+        double aspect = (double) rect.width / rect.height;
+        if (aspect < 0.55 || aspect > 1.8) {
+            return false;
+        }
+
+        double extent = area / (rect.width * (double) rect.height);
+        return extent >= 0.30 && extent <= 0.68;
     }
 
     private static void tryContours(Mat image, Mat redMask, double minContourArea,

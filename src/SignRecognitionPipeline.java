@@ -130,11 +130,16 @@ public class SignRecognitionPipeline {
         Rect bounds = detection.getBounds();
         double areaRatio = (bounds.width * bounds.height) / (double) Math.max(frameArea, 1);
 
-        String type = SignTypeHeuristic.detectType(crop, logHeuristic);
-        if (SignTypeHeuristic.looksLikeSpeedLimitSign(crop)) {
-            type = "SPEED";
-        } else if (!"SPEED".equals(type)) {
+        String type;
+        if (detection.isTriangular()) {
             type = "NON_SPEED";
+        } else {
+            type = SignTypeHeuristic.detectType(crop, logHeuristic);
+            if (SignTypeHeuristic.looksLikeSpeedLimitSign(crop)) {
+                type = "SPEED";
+            } else if (!"SPEED".equals(type)) {
+                type = "NON_SPEED";
+            }
         }
 
         return classifier.predict(crop, type, forVideo, areaRatio);
@@ -163,6 +168,11 @@ public class SignRecognitionPipeline {
         }
 
         Mat crop = detection.getCrop();
+
+        if (detection.isTriangular()) {
+            return SignTypeHeuristic.looksLikeWarningTriangle(crop);
+        }
+
         SignTypeHeuristic.ColorProfile p = SignTypeHeuristic.analyzeCenter(crop);
         if (p == null) {
             return false;

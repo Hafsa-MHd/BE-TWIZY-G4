@@ -41,11 +41,11 @@ System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
 1. DatasetAnalyzer          → statistiques sur dataset/
 2. DatasetFilter            → génère dataset_filtered/
 3. SignClassifierCompare    → précision KNN + SVM (console + CSV)
-4. SceneRecognitionSvm      → test sur une photo (ex. p5.jpg, 110 km/h)
-5. VideoRecognitionSvm      → démo vidéo (video1.avi, video2.avi)
+4. SceneRecognitionSvm      → photo (ronds + triangles)
+5. VideoRecognitionSvm      → vidéo (video1.avi, video2.avi)
 ```
 
-**Démo soutenance recommandée :** utiliser **SVM** pour les vidéos (`VideoRecognitionSvm`) — meilleure stabilité que le CNN sur les séquences du cours.
+**Démo soutenance recommandée :** **SVM** (`VideoRecognitionSvm`, `SceneRecognitionSvm`).
 
 ---
 
@@ -80,7 +80,7 @@ flowchart TB
 
 | Étape | Rôle |
 |-------|------|
-| `SignDetector` | Panneaux **rouges ronds** (HSV, contours, Hough) |
+| `SignDetector` | **Ronds rouges** (HSV, circularité, Hough) + **triangles jaunes** (contours 3 sommets) |
 | `SignTypeHeuristic` | Limite de vitesse vs autre panneau |
 | Classifieur | Prédit la classe (KNN, SVM ou CNN) |
 | `SpeedLimitRefinement` | Corrections métier (ex. 40→90 en vidéo) |
@@ -149,7 +149,7 @@ RoadSignImageProcessing/
 | `VideoRecognition` | Vidéo + **KNN** (labels verts) |
 | `VideoRecognitionSvm` | Vidéo + **SVM** (labels orange) — **démo conseillée** |
 | `VideoRecognitionCnn` | Vidéo + **CNN** (labels magenta) |
-| `SignDetector` | Détection géométrique / couleur |
+| `SignDetector` | Panneaux **ronds rouges** + **triangles jaunes** (danger) |
 | `SignRecognitionPipeline` | Pipeline image KNN |
 | `SignRecognitionPipelineSvm` / `Cnn` | Pipelines SVM / CNN |
 | `VideoSignTracker` | Stabilisation temporelle (vidéo) |
@@ -268,7 +268,7 @@ La console affiche la **précision globale** ; le détail par image est dans le 
 
 | Limite | Explication |
 |--------|-------------|
-| Panneaux **triangulaires** | Le détecteur cible surtout les **disques rouges** (limitations de vitesse). Courbes dangereuses, etc. : détection partielle. |
+| Panneaux **triangulaires** | Détection **jaune + forme 3 sommets** (amélioration récente). Peut rater triangles petits, de profil ou peu saturés. |
 | **CNN** | Moins précis que HOG+KNN/SVM sur le jeu test actuel ; utile pour la **comparaison de méthodes** dans le rapport. |
 | **YOLO** | Non implémenté (piste optionnelle du cours) ; détection assurée par heuristiques OpenCV. |
 | Vidéo | Qualité liée au détecteur frame par frame ; le **tracker** compense en partie. |
