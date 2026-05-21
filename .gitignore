@@ -1,0 +1,39 @@
+# --- Compilation Java / Eclipse ---
+bin/
+*.class
+.metadata/
+.settings/org.eclipse.jdt.core.prefs.bak
+
+# --- Résultats et debug (regénérables) ---
+results/
+detected_signs/
+debug_speed/
+debug_hog/
+
+# --- Données volumineuses (télécharger séparément, voir DATASET.md) ---
+dataset/
+dataset_filtered/
+
+# --- Médias de test (vidéos / photos du cours, ~100 Mo) ---
+external_images/
+
+# --- Modèles Python lourds (garder ONNX + labels dans Git) ---
+models/*.keras
+models/*.h5
+
+# --- OS / IDE ---
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+
+# --- Python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- Secrets ---
+.env
+*.key

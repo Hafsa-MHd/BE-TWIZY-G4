@@ -1,0 +1,13 @@
+Speed_limit_100_km_h
+Speed_limit_10_km_h
+Speed_limit_110_km_h
+Speed_limit_120_km_h
+Speed_limit_130_km_h
+Speed_limit_20_km_h
+Speed_limit_30_km_h
+Speed_limit_40_km_h
+Speed_limit_50_km_h
+Speed_limit_60_km_h
+Speed_limit_70_km_h
+Speed_limit_80_km_h
+Speed_limit_90_km_h
