@@ -3,7 +3,18 @@
 Reconnaissance de panneaux de signalisation à partir d’images et de vidéos, avec **OpenCV** (Java 21).  
 Le projet compare plusieurs méthodes de classification sur les **mêmes crops** et le **même détecteur**.
 
-**Contexte :** Bureau d’étude [Twizy — ARCHE](https://arche.univ-lorraine.fr/course/view.php?id=18190) (ENSEM, vision par ordinateur).
+**Contexte :** Bureau d’étude [Twizy — ARCHE](https://arche.univ-lorraine.fr/course/view.php?id=18190) (ENSEM, vision par ordinateur), groupe 4.
+
+## Résultats à regarder
+
+Sur le jeu de test filtré, un crop par image :
+
+| Méthode | Vitesses (13 classes) | Autres (34 classes) |
+| --- | --- | --- |
+| KNN + HOG | 78,0 % (248/318) | 79,1 % (159/201) |
+| SVM + HOG | 78,9 % (251/318) | 81,6 % (164/201) |
+
+La démo de soutenance est le SVM. Le CNN du dépôt est à réentraîner : ses scores actuels ne sont pas ceux à citer. Les images du cours ne sont pas dans ce dépôt.
 
 ---
 
